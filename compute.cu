@@ -43,8 +43,8 @@ void compute(){
 	vector3 *dhPos, *dhVel;
 	double *dMass;
 	vector3 *dAccel, *dSum;
-	int block = ceilf(NUMENTITIES / 16.0f);
-	int thread = ceilf(NUMENTITIES / (float) block);
+	int block = NUMENTITIES / 16.0f;
+	int thread = NUMENTITIES / (float) block;
 	dim3 gridDim(block, block, 1);
 	dim3 blockDim(thread, thread, 1);
 	

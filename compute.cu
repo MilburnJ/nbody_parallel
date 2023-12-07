@@ -7,10 +7,10 @@
 //break program into two parallel functions, one to do pairwise and one to sum
 
 __global__ void pairwise(vector3 *hPos, vector3 *accels, double *mass){
-        int column = (blockDim.x * blockIdx.x) + threadIdx.x;
-        int row = (blockDim.y * blockIdx.y) + threadIdx.y;
+        int row = (blockDim.x * blockIdx.x) + threadIdx.x;
+        int column = (blockDim.y * blockIdx.y) + threadIdx.y;
         int index = (NUMENTITIES * row) + column;
-        if(index < NUMENTITIES * NUMENTITIES){
+        if(row >= NUMENTITIES || column >= NUMENTITIES)return;
                 if (row == column){
                         FILL_VECTOR(accels[index], 0, 0, 0);
                 } else{
@@ -22,55 +22,31 @@ __global__ void pairwise(vector3 *hPos, vector3 *accels, double *mass){
 			FILL_VECTOR(accels[index],accelmag*distance[0]/magnitude,accelmag*distance[1]/magnitude,accelmag*distance[2]/magnitude);
 
                 }
-        }
 }
-__global__ void sum(vector3 *accels, vector3 *accel_sum, vector3 *hPos, vector3 *hVel){
-	int row = blockIdx.x * blockDim.x + threadIdx.x;
-	if (row < NUMENTITIES){
-		FILL_VECTOR(accel_sum[row], 0, 0, 0);
-		for (int j = 0; j < NUMENTITIES; j++){
+__global__ void sum(vector3 *accels, vector3 *hPos, vector3 *hVel){
+	int row = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if(row > NUMENTITIES) return;
+		vector3 accel_sum = {0,0,0};
+		for(int j = 0; j < NUMENTITIES; j++){
 			for (int k = 0; k < 3; k++){
-				accel_sum[row][k] += accels[(row * NUMENTITIES) + j][k];}
-		}
+				accel_sum[k] += accels[row * NUMENTITIES + j][k];}}
 		for (int k = 0; k < 3; k++){
-			hVel[row][k] += accel_sum[row][k] * INTERVAL;
+			hVel[row][k] += accel_sum[k] * INTERVAL;
 			hPos[row][k] = hVel[row][k] * INTERVAL;
 		}
-
-	}
 }
-void compute(){
-	vector3 *dhPos, *dhVel;
-	double *dMass;
-	vector3 *dAccel, *dSum;
-	int block = NUMENTITIES / 16.0f;
-	int thread = NUMENTITIES / (float) block;
-	dim3 gridDim(block, block, 1);
-	dim3 blockDim(thread, thread, 1);
+void compute(vector3* dAccel, vector3* dhPos, vector3* dhVel, double* dMass){
 	
-	cudaMallocManaged((void**) &dhPos, sizeof(vector3) * NUMENTITIES);
-	cudaMallocManaged((void**) &dhVel, sizeof(vector3) * NUMENTITIES);
-	cudaMallocManaged((void**) &dMass, sizeof(double) * NUMENTITIES);
-
-	cudaMemcpy(dhPos, hPos, sizeof(vector3)*NUMENTITIES, cudaMemcpyHostToDevice);
-	cudaMemcpy(dhVel, hVel, sizeof(vector3)*NUMENTITIES, cudaMemcpyHostToDevice);
-	cudaMemcpy(dMass, mass, sizeof(double)*NUMENTITIES, cudaMemcpyHostToDevice);
 	
-	cudaMallocManaged((void**) &dAccel, sizeof(vector3) * NUMENTITIES);
-        cudaMallocManaged((void**) &dSum, sizeof(vector3) * NUMENTITIES);
 
-	pairwise<<<gridDim, blockDim>>>(dhPos, dAccel, dMass);
+	dim3 dimBlock(16, 16);
+	dim3 dimGrid((NUMENTITIES+dimBlock.x-1)/dimBlock.x, (NUMENTITIES+dimBlock.y-1)/dimBlock.y);
+	pairwise<<<dimGrid, dimBlock>>>(dhPos, dAccel, dMass);
+	cudaDeviceSynchronize();
+	
+	dim3 dimBlock2(256);
+	dim3 gridDim2((NUMENTITIES+dimBlock.x-1)/dimBlock.x);	
+	sum<<<gridDim2, dimBlock2>>>(dAccel, dhPos, dhVel);
 	cudaDeviceSynchronize();
 
-	sum<<<gridDim.x, blockDim.x>>>(dAccel, dSum, dhPos, dhVel);
-	cudaDeviceSynchronize();
-
-	cudaMemcpy(hPos, dhPos, sizeof(vector3)*NUMENTITIES, cudaMemcpyDeviceToHost);
-	cudaMemcpy(hVel, dhVel, sizeof(vector3)*NUMENTITIES, cudaMemcpyDeviceToHost);
-	cudaMemcpy(dMass, mass, sizeof(double)*NUMENTITIES, cudaMemcpyHostToDevice);
-
-	cudaFree(dhPos);
-	cudaFree(dhVel);
-	cudaFree(dAccel);
-	cudaFree(dMass);
 }

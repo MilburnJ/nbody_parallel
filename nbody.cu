@@ -8,9 +8,11 @@
 #include "compute.h"
 
 // represents the objects in the system.  Global variables
-vector3 *hVel, *d_hVel;
-vector3 *hPos, *d_hPos;
+vector3 *hVel, *dhVel;
+vector3 *hPos, *dhPos;
 double *mass;
+double *dMass;
+vector3 *dAccel;
 
 //initHostMemory: Create storage for numObjects entities in our system
 //Parameters: numObjects: number of objects to allocate
@@ -102,14 +104,35 @@ int main(int argc, char **argv)
 	#ifdef DEBUG
 	printSystem(stdout);
 	#endif
+
+	cudaMalloc(&dhVel, sizeof(vector3) * NUMENTITIES);
+	cudaMemcpy(dhVel, hVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
+	cudaMalloc(&dhPos, sizeof(vector3) * NUMENTITIES);
+	cudaMemcpy(dhPos, hPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
+	cudaMalloc(&dMass, sizeof(double) * NUMENTITIES);
+	cudaMemcpy(dMass, mass, sizeof(double) * NUMENTITIES, cudaMemcpyHostToDevice);
+	cudaMalloc(&dAccel, sizeof(vector3)*NUMENTITIES*NUMENTITIES);
 	for (t_now=0;t_now<DURATION;t_now+=INTERVAL){
-		compute();
+		compute(dAccel,dhPos,dhVel,dMass);
 	}
+
+	cudaMemcpy(hVel, dhVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
+	cudaMemcpy(hPos, dhPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
+	
 	clock_t t1=clock()-t0;
+	//Allodcate room for values on device memory
+	
 #ifdef DEBUG
 	printSystem(stdout);
 #endif
 	printf("This took a total time of %f seconds\n",(double)t1/CLOCKS_PER_SEC);
 
+	cudaFree(dhVel);
+	cudaFree(dhPos);
+	cudaFree(dMass);
+	cudaFree(dAccel);
+
 	freeHostMemory();
 }
+
+	

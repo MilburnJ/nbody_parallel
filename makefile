@@ -11,4 +11,4 @@ compute.o: compute.cu config.h vector.h $(ALWAYS_REBUILD)
 parallel: nbody.cu compute.cu
 	nvcc $(FLAGS) nbody.cu compute.cu -o parallel $(LIBS) 
 clean:
-	rm -f *.o nbody 
+	rm -f *.o parallel 
